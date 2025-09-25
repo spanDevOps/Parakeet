@@ -54,19 +54,22 @@ class ParakeetWebSocketServer:
     
     async def register_client(self, websocket: WebSocketServerProtocol):
         """Register a new client connection."""
-        self.clients.add(websocket)
-        client_info = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
-        print(f"👤 Client connected: {client_info}")
-        print(f"📊 Total clients: {len(self.clients)}")
-        
-        # Send welcome message
-        welcome_msg = {
-            "type": "connection_established",
-            "message": "Connected to Parakeet ASR WebSocket Server",
-            "model": self.model_name,
-            "timestamp": int(time.time() * 1000)
-        }
-        await websocket.send(json.dumps(welcome_msg))
+        try:
+            self.clients.add(websocket)
+            client_info = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
+            print(f"👤 Client connected: {client_info}")
+            print(f"📊 Total clients: {len(self.clients)}")
+            
+            # Send welcome message
+            welcome_msg = {
+                "type": "connection_established",
+                "message": "Connected to Parakeet ASR WebSocket Server",
+                "model": self.model_name,
+                "timestamp": int(time.time() * 1000)
+            }
+            await websocket.send(json.dumps(welcome_msg))
+        except Exception as e:
+            print(f"⚠️ Client registration error: {e}")
     
     async def unregister_client(self, websocket: WebSocketServerProtocol):
         """Unregister a client connection."""
@@ -688,17 +691,31 @@ class ParakeetWebSocketServer:
         except Exception as _:
             pass
 
+        # Custom connection handler to filter invalid requests
+        async def connection_handler(websocket, path):
+            try:
+                await self.handle_client(websocket)
+            except websockets.exceptions.InvalidMessage:
+                # Silently ignore invalid HTTP requests (likely bots/scanners)
+                pass
+            except websockets.exceptions.ConnectionClosedError:
+                # Silently ignore connection closed errors
+                pass
+            except Exception as e:
+                # Log only unexpected errors
+                print(f"⚠️ Connection error: {e}")
+
         # Start WebSocket server with better error handling
         server = await websockets.serve(
-            # websockets 15+ no longer passes path to handler; keep compat
-            lambda ws, *args, **kwargs: self.handle_client(ws),
+            connection_handler,
             self.host,
             self.port,
             ping_interval=25,
             ping_timeout=25,
             close_timeout=10,
             max_size=2**20,  # 1MB max message size
-            compression=None  # Disable compression for better compatibility
+            compression=None,  # Disable compression for better compatibility
+            logger=None  # Disable websockets internal logging
         )
         
         print("✅ WebSocket server started!")
