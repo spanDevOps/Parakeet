@@ -106,17 +106,31 @@ if torch.cuda.is_available():
     print(f'🎯 GPU: {torch.cuda.get_device_name()}')
 "
 
+# Kill any existing Jupyter process that might be using port 8080
+print_status "Checking for Jupyter processes on port 8080..."
+JUPYTER_PID=$(ps aux | grep jupyter | grep -v grep | awk '{print $2}' | head -1)
+if [ ! -z "$JUPYTER_PID" ]; then
+    print_warning "Found Jupyter process (PID: $JUPYTER_PID) using port 8080"
+    print_status "Killing Jupyter to free port 8080 for Parakeet server..."
+    sudo kill -9 $JUPYTER_PID
+    print_success "✅ Jupyter process killed"
+else
+    print_status "No Jupyter processes found on port 8080"
+fi
+
 # Start server
 echo "🚀 Starting Parakeet ASR server..."
 echo "🌐 WebSocket: ws://0.0.0.0:8080"
 echo "📊 Monitor with: htop"
 echo "🔄 Restart with: cd $PROJECT_DIR && source parakeet-env/bin/activate && python parakeet_websocket_server.py"
 
-# Start in background
+# Start server in foreground
 cd $PROJECT_DIR
 source parakeet-env/bin/activate
-WEBSOCKET_HOST=0.0.0.0 nohup python parakeet_websocket_server.py > /var/log/parakeet-asr.log 2>&1 &
 
-echo "🎉 Parakeet ASR server is running!"
-echo "📝 Check logs: tail -f /var/log/parakeet-asr.log"
-echo "🔍 Monitor: htop"
+echo "🎉 Starting Parakeet ASR server in foreground..."
+echo "📝 Press Ctrl+C to stop the server"
+echo "🔍 Monitor with: htop (in another terminal)"
+
+# Start server in foreground (not background)
+WEBSOCKET_HOST=0.0.0.0 python parakeet_websocket_server.py
