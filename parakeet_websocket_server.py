@@ -29,8 +29,8 @@ class ParakeetWebSocketServer:
     
     def __init__(
         self,
-        host: str = "0.0.0.0",
-        port: int = 8080,
+        host: str = "localhost",
+        port: int = 8765,
         model_name: str = "nvidia/parakeet-tdt_ctc-1.1b"
     ):
         self.host = host
@@ -54,25 +54,19 @@ class ParakeetWebSocketServer:
     
     async def register_client(self, websocket: WebSocketServerProtocol):
         """Register a new client connection."""
-        try:
-            self.clients.add(websocket)
-            client_info = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}" if websocket.remote_address else "unknown"
-            print(f"👤 Client connected: {client_info}")
-            print(f"📊 Total clients: {len(self.clients)}")
-            
-            # Send welcome message
-            welcome_msg = {
-                "type": "connection_established",
-                "message": "Connected to Parakeet ASR WebSocket Server",
-                "model": self.model_name,
-                "timestamp": int(time.time() * 1000)
-            }
-            await websocket.send(json.dumps(welcome_msg))
-        except Exception as e:
-            import traceback
-            print(f"❌ Client registration error: {e}")
-            print(f"🔍 Traceback: {traceback.format_exc()}")
-            raise  # Re-raise to trigger WebSocket error
+        self.clients.add(websocket)
+        client_info = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
+        print(f"👤 Client connected: {client_info}")
+        print(f"📊 Total clients: {len(self.clients)}")
+        
+        # Send welcome message
+        welcome_msg = {
+            "type": "connection_established",
+            "message": "Connected to Parakeet ASR WebSocket Server",
+            "model": self.model_name,
+            "timestamp": int(time.time() * 1000)
+        }
+        await websocket.send(json.dumps(welcome_msg))
     
     async def unregister_client(self, websocket: WebSocketServerProtocol):
         """Unregister a client connection."""
@@ -123,9 +117,9 @@ class ParakeetWebSocketServer:
             self.server = server
             self.sample_rate = 16000
             self.auth_data = None  # Store AssemblyAI authentication data
-            # Adaptive noise-resistant settings - improved for better quality
-            self.chunk_min_samples = int(1.5 * self.sample_rate)   # 1.5s to first interim (more context)
-            self.min_speech_duration = int(1.0 * self.sample_rate)  # 1.0s minimum speech before finalization
+            # Adaptive noise-resistant settings
+            self.chunk_min_samples = int(1.0 * self.sample_rate)   # 1.0s to first interim (capture beginning)
+            self.min_speech_duration = int(0.5 * self.sample_rate)  # 0.5s minimum speech before finalization
             self.interim_count = 0  # Track number of interim results for accumulating context
             final_silence_duration = float(os.getenv('FINAL_SILENCE_DURATION', '2.0'))  # Increased to 2.0s for more tolerance
             max_silence_duration = float(os.getenv('MAX_SILENCE_DURATION', '4.0'))  # Increased to 4.0s for longer pauses
@@ -606,30 +600,23 @@ class ParakeetWebSocketServer:
             await websocket.send(json.dumps(response))
     
     async def handle_client(self, websocket: WebSocketServerProtocol):
-        """Handle individual client connections with better error handling."""
+        """Handle individual client connections."""
+        await self.register_client(websocket)
+        
         try:
-            await self.register_client(websocket)
-            
             async for message in websocket:
-                try:
-                    if isinstance(message, (bytes, bytearray)):
-                        # Binary PCM chunk from this client
-                        session: ParakeetWebSocketServer.ConnectionSession = getattr(websocket, "_session", None)
-                        if session is None:
-                            # Ignore audio until start_transcription received
-                            continue
-                        session.append_audio(message)
-                        await session.process()
-                    else:
-                        await self.handle_client_message(websocket, message)
-                except Exception as e:
-                    print(f"❌ Message processing error: {e}")
-                    continue
-                    
+                if isinstance(message, (bytes, bytearray)):
+                    # Binary PCM chunk from this client
+                    session: ParakeetWebSocketServer.ConnectionSession = getattr(websocket, "_session", None)
+                    if session is None:
+                        # Ignore audio until start_transcription received
+                        continue
+                    session.append_audio(message)
+                    await session.process()
+                else:
+                    await self.handle_client_message(websocket, message)
         except websockets.exceptions.ConnectionClosed:
-            print("🔌 Client connection closed normally")
-        except websockets.exceptions.InvalidMessage as e:
-            print(f"❌ Invalid WebSocket message: {e}")
+            pass
         except Exception as e:
             print(f"❌ Client error: {e}")
         finally:
@@ -694,17 +681,14 @@ class ParakeetWebSocketServer:
         except Exception as _:
             pass
 
-        # Start WebSocket server with better error handling
+        # Start WebSocket server
         server = await websockets.serve(
-            # Use lambda to handle both old and new websockets versions
-            lambda ws, *args: self.handle_client(ws),
+            # websockets 15+ no longer passes path to handler; keep compat
+            lambda ws, *args, **kwargs: self.handle_client(ws),
             self.host,
             self.port,
             ping_interval=25,
-            ping_timeout=25,
-            close_timeout=10,
-            max_size=2**20,  # 1MB max message size
-            compression=None  # Disable compression for better compatibility
+            ping_timeout=25
         )
         
         print("✅ WebSocket server started!")
@@ -726,8 +710,8 @@ async def main():
     load_dotenv()
     
     # Configuration
-    host = os.getenv("WEBSOCKET_HOST", "0.0.0.0")
-    port = int(os.getenv("WEBSOCKET_PORT", "8080"))
+    host = os.getenv("WEBSOCKET_HOST", "localhost")
+    port = int(os.getenv("WEBSOCKET_PORT", "8765"))
     model_name = os.getenv("MODEL_NAME", "nvidia/parakeet-tdt_ctc-1.1b")
     
     # Create and start server
