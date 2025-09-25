@@ -29,8 +29,8 @@ class ParakeetWebSocketServer:
     
     def __init__(
         self,
-        host: str = "localhost",
-        port: int = 8765,
+        host: str = "0.0.0.0",
+        port: int = 8080,
         model_name: str = "nvidia/parakeet-tdt_ctc-1.1b"
     ):
         self.host = host
@@ -710,8 +710,8 @@ async def main():
     load_dotenv()
     
     # Configuration
-    host = os.getenv("WEBSOCKET_HOST", "localhost")
-    port = int(os.getenv("WEBSOCKET_PORT", "8765"))
+    host = os.getenv("WEBSOCKET_HOST", "0.0.0.0")
+    port = int(os.getenv("WEBSOCKET_PORT", "8080"))
     model_name = os.getenv("MODEL_NAME", "nvidia/parakeet-tdt_ctc-1.1b")
     
     # Create and start server
