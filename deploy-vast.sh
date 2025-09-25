@@ -115,7 +115,7 @@ echo "🔄 Restart with: cd $PROJECT_DIR && source parakeet-env/bin/activate && 
 # Start in background
 cd $PROJECT_DIR
 source parakeet-env/bin/activate
-nohup python parakeet_websocket_server.py > /var/log/parakeet-asr.log 2>&1 &
+WEBSOCKET_HOST=0.0.0.0 nohup python parakeet_websocket_server.py > /var/log/parakeet-asr.log 2>&1 &
 
 echo "🎉 Parakeet ASR server is running!"
 echo "📝 Check logs: tail -f /var/log/parakeet-asr.log"
