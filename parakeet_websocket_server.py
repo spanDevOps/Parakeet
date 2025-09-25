@@ -694,33 +694,17 @@ class ParakeetWebSocketServer:
         except Exception as _:
             pass
 
-        # Custom connection handler to filter invalid requests
-        async def connection_handler(websocket, path):
-            try:
-                await self.handle_client(websocket)
-            except websockets.exceptions.InvalidMessage:
-                # Silently ignore invalid HTTP requests (likely bots/scanners)
-                pass
-            except websockets.exceptions.ConnectionClosedError:
-                # Silently ignore connection closed errors
-                pass
-            except Exception as e:
-                # Log detailed error for debugging
-                import traceback
-                print(f"❌ Connection error: {e}")
-                print(f"🔍 Traceback: {traceback.format_exc()}")
-
         # Start WebSocket server with better error handling
         server = await websockets.serve(
-            connection_handler,
+            # Use lambda to handle both old and new websockets versions
+            lambda ws, *args: self.handle_client(ws),
             self.host,
             self.port,
             ping_interval=25,
             ping_timeout=25,
             close_timeout=10,
             max_size=2**20,  # 1MB max message size
-            compression=None,  # Disable compression for better compatibility
-            logger=None  # Disable websockets internal logging
+            compression=None  # Disable compression for better compatibility
         )
         
         print("✅ WebSocket server started!")
