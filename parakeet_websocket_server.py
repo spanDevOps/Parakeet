@@ -117,9 +117,9 @@ class ParakeetWebSocketServer:
             self.server = server
             self.sample_rate = 16000
             self.auth_data = None  # Store AssemblyAI authentication data
-            # Adaptive noise-resistant settings
-            self.chunk_min_samples = int(1.0 * self.sample_rate)   # 1.0s to first interim (capture beginning)
-            self.min_speech_duration = int(0.5 * self.sample_rate)  # 0.5s minimum speech before finalization
+            # Adaptive noise-resistant settings - improved for better quality
+            self.chunk_min_samples = int(1.5 * self.sample_rate)   # 1.5s to first interim (more context)
+            self.min_speech_duration = int(1.0 * self.sample_rate)  # 1.0s minimum speech before finalization
             self.interim_count = 0  # Track number of interim results for accumulating context
             final_silence_duration = float(os.getenv('FINAL_SILENCE_DURATION', '2.0'))  # Increased to 2.0s for more tolerance
             max_silence_duration = float(os.getenv('MAX_SILENCE_DURATION', '4.0'))  # Increased to 4.0s for longer pauses
@@ -600,23 +600,30 @@ class ParakeetWebSocketServer:
             await websocket.send(json.dumps(response))
     
     async def handle_client(self, websocket: WebSocketServerProtocol):
-        """Handle individual client connections."""
-        await self.register_client(websocket)
-        
+        """Handle individual client connections with better error handling."""
         try:
+            await self.register_client(websocket)
+            
             async for message in websocket:
-                if isinstance(message, (bytes, bytearray)):
-                    # Binary PCM chunk from this client
-                    session: ParakeetWebSocketServer.ConnectionSession = getattr(websocket, "_session", None)
-                    if session is None:
-                        # Ignore audio until start_transcription received
-                        continue
-                    session.append_audio(message)
-                    await session.process()
-                else:
-                    await self.handle_client_message(websocket, message)
+                try:
+                    if isinstance(message, (bytes, bytearray)):
+                        # Binary PCM chunk from this client
+                        session: ParakeetWebSocketServer.ConnectionSession = getattr(websocket, "_session", None)
+                        if session is None:
+                            # Ignore audio until start_transcription received
+                            continue
+                        session.append_audio(message)
+                        await session.process()
+                    else:
+                        await self.handle_client_message(websocket, message)
+                except Exception as e:
+                    print(f"❌ Message processing error: {e}")
+                    continue
+                    
         except websockets.exceptions.ConnectionClosed:
-            pass
+            print("🔌 Client connection closed normally")
+        except websockets.exceptions.InvalidMessage as e:
+            print(f"❌ Invalid WebSocket message: {e}")
         except Exception as e:
             print(f"❌ Client error: {e}")
         finally:
@@ -681,14 +688,17 @@ class ParakeetWebSocketServer:
         except Exception as _:
             pass
 
-        # Start WebSocket server
+        # Start WebSocket server with better error handling
         server = await websockets.serve(
             # websockets 15+ no longer passes path to handler; keep compat
             lambda ws, *args, **kwargs: self.handle_client(ws),
             self.host,
             self.port,
             ping_interval=25,
-            ping_timeout=25
+            ping_timeout=25,
+            close_timeout=10,
+            max_size=2**20,  # 1MB max message size
+            compression=None  # Disable compression for better compatibility
         )
         
         print("✅ WebSocket server started!")
