@@ -56,7 +56,7 @@ class ParakeetWebSocketServer:
         """Register a new client connection."""
         try:
             self.clients.add(websocket)
-            client_info = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
+            client_info = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}" if websocket.remote_address else "unknown"
             print(f"👤 Client connected: {client_info}")
             print(f"📊 Total clients: {len(self.clients)}")
             
@@ -69,7 +69,10 @@ class ParakeetWebSocketServer:
             }
             await websocket.send(json.dumps(welcome_msg))
         except Exception as e:
-            print(f"⚠️ Client registration error: {e}")
+            import traceback
+            print(f"❌ Client registration error: {e}")
+            print(f"🔍 Traceback: {traceback.format_exc()}")
+            raise  # Re-raise to trigger WebSocket error
     
     async def unregister_client(self, websocket: WebSocketServerProtocol):
         """Unregister a client connection."""
@@ -702,8 +705,10 @@ class ParakeetWebSocketServer:
                 # Silently ignore connection closed errors
                 pass
             except Exception as e:
-                # Log only unexpected errors
-                print(f"⚠️ Connection error: {e}")
+                # Log detailed error for debugging
+                import traceback
+                print(f"❌ Connection error: {e}")
+                print(f"🔍 Traceback: {traceback.format_exc()}")
 
         # Start WebSocket server with better error handling
         server = await websockets.serve(
