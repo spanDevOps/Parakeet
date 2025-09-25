@@ -108,7 +108,7 @@ if torch.cuda.is_available():
 
 # Start server
 echo "🚀 Starting Parakeet ASR server..."
-echo "🌐 WebSocket: ws://0.0.0.0:8765"
+echo "🌐 WebSocket: ws://0.0.0.0:8080"
 echo "📊 Monitor with: htop"
 echo "🔄 Restart with: cd $PROJECT_DIR && source parakeet-env/bin/activate && python parakeet_websocket_server.py"
 
